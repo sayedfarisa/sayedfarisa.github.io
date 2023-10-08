@@ -1,0 +1,103 @@
+// Generic utility functions.
+//
+// History:
+// Feb 3, 2006, Incorporated into Google Mars, Noel Gorelick, gorelick@asu.edu
+
+function px(size) { return size + 'px'; }
+function em(size) { return size + 'em'; }
+
+function makeDiv(doc, style) {
+  var div = doc.createElement('div');
+  if (!style) {
+    // Default style for divs.  This is probably a bad thing to do.
+    style = { position: 'absolute', left: px(0), top: px(0)};
+  }
+  for (var name in style) {
+    div.style[name] = style[name];
+  }
+  return div;
+}
+
+function makeImage(doc, src) {
+  var img = doc.createElement('img');
+  img.src = src;
+  return img;
+}
+
+function getWindowHeight() {
+  if (window.self && self.innerHeight) {
+    return self.innerHeight;
+  }
+  if (document.documentElement && document.documentElement.clientHeight) {
+    return document.documentElement.clientHeight;
+  }
+  return 0;
+}
+
+function getWindowWidth() {
+  if (window.self && self.innerWidth) {
+    return self.innerWidth;
+  }
+  if (document.documentElement && document.documentElement.clientWidth) {
+    return document.documentElement.clientWidth;
+  }
+  return 0;
+}
+
+function getPosition(elem) {
+  var offset = 0;
+  var x = 0; y = 0;
+  var w = elem.offsetWidth;
+  var h = elem.offsetHeight;
+  while (elem != null) {
+    y += elem.offsetTop;
+    x += elem.offsetLeft;
+    elem = elem.offsetParent;
+  }
+  var out = { top: y, left: x, width: w, height: h};
+  return out;
+}
+
+// Removes all of a DOM element's children.
+function removeChildren(element) {
+  var t;
+  var children = Array();
+  while ((t = element.lastChild) != null) {
+    children.push(element.removeChild(t));
+  }
+  return children;
+}
+
+function formatFloat(n, p) {
+  var txt = ('' + n).split('.');
+  return txt.length == 1 ? n.toString() : txt[0] + '.' + txt[1].substr(0, p);
+}
+
+function wrap(value, min, max) {
+  while (value > max) {
+    value -= (max - min);
+  }
+  while (value < min) {
+    value += (max - min);
+  }
+  return value;
+}
+
+function toDeg(x) { return x * 180 / Math.PI; }
+
+function getStyle(elem, name) {
+  if (elem.currentStyle) {
+    return elem.currentStyle;
+  }
+  if (document.defaultView && document.defaultView.getComputedStyle) {
+    return getComputedStyle(elem, name);
+  }
+  return null;
+}
+
+function htmlEscape(s) {
+  s = s.replace(/&/g, '&amp;');
+  s = s.replace(/>/g, '&gt;');
+  s = s.replace(/</g, '&lt;');
+  return s;
+}

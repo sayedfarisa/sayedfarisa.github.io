@@ -1,0 +1,219 @@
+// Mapsearch - A class to manage feature searching, in the browser
+//
+// This class "understands" where our searchable data is located
+// and how it's formatted.  It passes search queries to the Search
+// class and produces pretty formatting for the results.
+//
+// History:
+// Dec 10, 2006,  Original Version, Michael Weiss-Malik, nasamichael@google.com
+// Feb 3, 2006, Incorporated into Google Mars, Noel Gorelick, gorelick@asu.edu
+
+var MapSearch = Class.create();
+
+MapSearch.prototype = Object.extend(new Search());
+
+MapSearch.prototype.initialize = function() {
+  var i;
+  for (i = 0; i < data.length; i++) {
+    data[i] = data[i] + '#' + feature_types[data_type.charAt(i)];
+  }
+  this.prepareSearch(data);
+
+  // Take the extra "google specific" categories off the end of feature types
+  // so they don't show up in the "Type: " part of the info HTML.
+  // These are delineated with a ",,".
+  for (i in feature_types) {
+    feature_types[i] = feature_types[i].replace(/,,.+/, '');
+  }
+};
+
+/**
+ * Executes the given query.
+ * @param {string} query The query to execute.
+ * @return {string} The search response.
+ */
+MapSearch.prototype.doSearch = function(query) {
+  this.lastSearchQuery = query;
+
+  // Log this search, so we can add new search terms for things we don't have.
+  new Ajax.Request('search?q=' + query);
+
+  var results = this.textSearch(query);
+  results.getResult = function(i) {
+    var me = MapSearch.prototype.MakeResult(results[i]);
+    me.getExtendedHTML = MapSearch.prototype.loadHTML;
+    return me;
+  };
+  return results;
+};
+
+MapSearch.prototype.inBounds = function(results, bounds) {
+  if (bounds == null) return results;
+  if (bounds.isFullLng()) return results;
+  var inBounds = Array();
+
+  // Make sure to use 360 modulo math to avoid wrapping problems.
+  var y1 = toDeg(bounds.lat.lo);
+  var y2 = toDeg(bounds.lat.hi);
+  var x1 = (toDeg(bounds.lng.lo) + 360) % 360;
+  var x2 = (toDeg(bounds.lng.hi) + 360) % 360;
+  var wrapping = 0;
+  if (x2 < x1) {
+    x2 += 360;
+    wrapping = 1;
+  }
+
+  for (var i = 0; i < results.length; i++) {
+    var idx = results[i];
+    var lon = (data_lons[idx] + 360) % 360;
+    var lat = data_lats[idx];
+    if (lat >= y1 && lat <= y2 &&
+        ((lon >= x1 && lon <= x2) ||
+         (wrapping && lon + 360 >= x1 && lon + 360 <= x2))) {
+      inBounds.push(idx);
+    }
+  }
+  // Stick a little function on this array to make it look like an
+  // object.  We do this so our caller doesn't have to know how to
+  // decode our data.
+  inBounds.getResult = function(i) {
+    return MapSearch.prototype.MakeResult(inBounds[i]);
+  };
+  return inBounds;
+};
+
+/**
+ * @param {number} idx Data index number from doSearch.
+ * @param {boolean} snippet Indicates whether to send back a stripped down
+ *     version.
+ * @return {string} Pretty HTML for display of a search result.
+ */
+MapSearch.prototype.getDataHtml = function(idx, snippet) {
+  var lon = data_lons[idx]; lon = lon >= 0 ? lon + 'E' : -lon + 'W';
+  var lat = data_lats[idx]; lat = lat >= 0 ? lat + 'N' : -lat + 'S';
+  var diam = data_diam[idx];
+  var credit = data_credits[idx];
+  var d = data[idx].split(/#/);
+  var named_in = d[0];
+  var name = d[1];
+  var named_for = this.expand_wikis(d[2]);
+  var type = feature_types[data_type.charAt(idx)];
+
+  var img = data_imgs[idx];
+  var url = data_urls[idx];
+
+  if (img) {
+    var img = '<div class="infoimg" ' +
+        'style="min-width: 80px; min-height: 80px; float: right;">' +
+        (url ? '<a href="' + url + '">' : '') +
+        "<img src='" + img + "'>" +
+        (url ? '</a>' : '') +
+        '</div>';
+  } else {
+    img = '';
+  }
+
+  // Ok, this is a mess.  We need to clean this up.
+  if (type == 'Spacecraft') {  // landed asset
+    if (snippet) {
+      return named_for.replace(/<[^>]*>/g, '');
+    }
+    return '<div style="width: 250px;"><small>' +
+        '<b>Spacecraft:</b> ' + name + '<br>' + img +
+        '<b>Location:</b> ' + lat + ', ' + lon + '<br>' +
+        '<b>Launched:</b> ' + named_in + '<br>' +
+        '<b>Results:</b> ' + named_for +
+        (credit ? '<br><b>Image: </b> ' + credit : '') +
+        '</small></div>';
+  }
+  if (type == 'Stories') {  // article
+    if (snippet) {
+      return named_for + ' article';
+    }
+    var link = '<a href="' + url + '">';
+    return '<div style=""><small>' +
+        '<table class="infotable">' +
+        '<tr><td colspan=2>' +
+        '<b>Article:</b> ' + link + name + '</a>' +
+        '</td></tr>' +
+        '<tr><td><b>Source:</b> ' + named_for + '<br>' +
+        '<b>Date:</b> ' + named_in + '<br>' +
+        '<b>Location:</b> ' + lat + ', ' + lon + '<br>' +
+        '</td><td width=80 height=80>' + img +
+        '</td></tr></table>' +
+        '</small></div>';
+  }
+  // normal surface feature
+  if (snippet) {
+    return 'Named for: ' + named_for.replace(/<[^>]+>/g, '');
+  }
+  return '<div style="width: 250px;"><small>' +
+      '<b>Feature:</b> ' + name + '<br>' + img +
+      '<b>Type:</b> ' +
+      '<a href="javascript:glossary(\'' + type.split(',')[0] + '\')">' +
+      type + '</a><br>' +
+      '<b>Location:</b> ' + lat + ', ' + lon + '<br>' +
+      ((diam > 0) ? ('<b>Size:</b> ' + diam + 'km / ' +
+      Math.round(diam * 0.621371192) + 'mi<br>') : '') +
+      '<b>Named in:</b> ' + named_in + '<br>' +
+      '<b>Named for:</b> ' + named_for +
+      '</small></div>';
+};
+
+/**
+ * To reduce the size of the javascript file, as well as to prevent
+ * silly search hits (i.e. h* would match http), an abbreviated wiki
+ * URL syntax is used. This function expands a <Wiki_Article>
+ * reference back into its full URL. Also handles <Wiki_Article custom text>.
+ * @param {string} raw The wiki article reference.
+ * @return {string} The full URL.
+ */
+MapSearch.prototype.expand_wikis = function(raw) {
+  var shorthands = raw.match(/<[^>]+>/g);
+  if (shorthands != null) {
+    for (var j = 0; j < shorthands.length; j++) {
+      var sh = shorthands[j];
+      var wiki;
+      var text;
+      if (/<(\S+)>/.test(sh)) {
+        // Special case of "<Foo_Bar>" expands
+        // into "<a href=http://.../Foo_Bar>Foo Bar</a>".
+        wiki = RegExp.$1;
+        text = wiki.replace(/_/g, ' ');
+      } else if (/<(\S+) (.+)>/.test(sh)) {
+        // General case of "<Foo_Bar My Text>" expands
+        // into "<a href=http://.../Foo_Bar>My Text</a>".
+        wiki = RegExp.$1;
+        text = RegExp.$2;
+      } else {
+        // Shouldn't happen!
+        continue;  // return "FAILURE: " + sh;
+      }
+      raw = raw.replace(
+          new RegExp(sh, 'g'),
+          '<a target=_blank href="http://en.wikipedia.org/wiki/' + wiki +
+          '">' + text + '</a>');
+    }
+  }
+  return raw;
+};
+
+MapSearch.prototype.MakeResult = function(dataIdx) {
+  var d = data[dataIdx].split(/#/);
+  var name = d[1];
+  var lat = data_lats[dataIdx];
+  var lon = data_lons[dataIdx] + 0;
+  var type = feature_types[data_type.charAt(dataIdx)];
+  var diam = data_diam[dataIdx];
+  if (lon > 180) lon -= 360;
+
+  return {
+    lat: lat,
+    lon: lon,
+    name: name,
+    index: dataIdx,
+    snippet: this.getDataHtml(dataIdx, true),
+    type: type,
+    html: this.getDataHtml(dataIdx, false)
+  };
+};

@@ -1,0 +1,190 @@
+html,
+body {
+  font-family: arial, sans-serif;
+  height: 100%;
+  margin: 0px;
+  overflow: hidden;
+}
+
+td {
+  font-family: arial, sans-serif;
+  padding: 0px 5px;
+}
+
+a:link {
+  color: #15c;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+#map {
+  left: 0px;
+  position: relative;
+  top: 0px;
+}
+
+#page {
+  left: 0px;
+  position: relative;
+  top: 0px;
+  width: 100%;
+}
+
+#header {
+  border-bottom: 2px solid #bdbdbd;
+  font-family: arial, sans-serif;
+  font-size: small;
+  padding: 5px;
+}
+
+.border {
+  border: #000 solid 0px;
+  margin: 0px;
+  padding: 0px;
+}
+
+#searchtext {
+  padding: 5px;
+}
+
+.about {
+  background-color: #fff;
+  padding-left: 20px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.snippetHeader {
+  padding-left: 10px;
+  padding-top: 5px;
+}
+
+.snippet {
+  padding-left: 10px;
+}
+
+#sidebar {
+  left: 0px;
+  padding-left: 5px;
+  padding-right: 0px;
+  position: absolute;
+  top: 0px;
+  width: 250px;
+}
+
+#srClose { text-align: right; }
+
+.t1 {}
+
+.t2 {
+  font-size: 70%;
+  vertical-align: bottom;
+}
+
+#srtGlossary {
+  text-align: right;
+}
+
+#srtFound {}
+
+#srBody {
+  border: #aaa solid 0px;
+  border-top-width: 1px;
+  font-size: 13px;
+  left: 0px;
+  padding-top: 5px;
+  position: relative;
+  top: 0px;
+}
+
+#srPage {
+  bottom: 10px;
+  position: absolute;
+  text-align: center;
+  width: 100%;
+}
+
+#srPage a,
+#srPage img {
+  border: #f00 solid 0px;
+  text-decoration: none;
+  vertical-align: top;
+}
+
+.infoimg img { margin-left: 5px; }
+.infotable td { vertical-align: top; }
+
+#bar {
+  border: #f90 solid 0px;
+  border-top-width: 1px;
+  font-size: 13px;
+  padding-bottom: 3px;
+  padding-right: 5px;
+  vertical-align: mid;
+}
+
+#bar .links {
+  padding-left: 5px;
+  text-align: left;
+}
+
+#mapcaption {
+  padding-right: 5px;
+  text-align: center;
+}
+
+#bar .links a img {
+  border-width: 0px;
+  vertical-align: bottom;
+}
+
+/* The category table is more like a menu -> visited links should use the same
+   color as the non-visited ones */
+.table-categories {
+  border: 0 0 0 0;
+  border-collapse: collapse;
+  color: #00c;
+  font-size: small;
+  margin: 0 0 0 0;
+  padding: 0 0 0 0;
+  vertical-align: bottom;
+}
+
+.table-categories a:visited { color: #15c; }
+.table-categories a:active { color: #f00; }
+
+.td-top-category {
+  padding-bottom: 2px;
+  padding-top: .5ex;
+  text-align: left;
+}
+
+.td-mid-category {
+  padding-bottom: 2px;
+  text-align: left;
+}
+
+.td-bot-category {
+  padding-bottom: 2px;
+  text-align: left;
+}
+
+.blue-button {
+  background-color: #4d90fe;
+  background-image: -webkit-linear-gradient(top, #4d90fe, #4787ed);
+  border: solid 1px #3079ed;
+  -webkit-border-radius: 2px;
+  border-radius: 2px;
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 7px 15px;
+}
+
+.map-text {
+  color: white;
+  text-shadow: -1px 0 #6e6e6e, 0 1px #6e6e6e, 1px 0 #6e6e6e, 0 -1px #6e6e6e;
+}

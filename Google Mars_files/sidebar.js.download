@@ -1,0 +1,334 @@
+// Copyright 2012 Google Inc. All Rights Reserved.
+
+// Sidebar - A class to manage the search results sidebar.
+//           This isn't really a stand-alone class.  It has
+//           intimate interaction with the Maps API and Search.
+//
+// This class' job is to handle displaying results and dealing
+// with paging if there are too many results to display.
+// It also handles creating map markers because we only display
+// the markers for those results that fit on the page.
+//
+// History:
+// Feb 3, 2006, Incorporated into Google Mars, Noel Gorelick, gorelick@asu.edu
+
+var Sidebar = Class.create();
+Sidebar.prototype = {
+  // These functions passed to initialize allows us to remove
+  // some global dependencies.
+  initialize: function(resizeUI, map) {
+    this.resizeUI = resizeUI;
+    this.map = map;
+    this.container = $('sidebar');
+    this.markers = {};
+
+    this.infoWindow = new google.maps.InfoWindow({});
+
+    // Create the icons for our map markers.
+    var baseUrl = 'https://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_';
+    this.icons = {
+      red: this.makeIcon(baseUrl + 'red.png'),
+      green: this.makeIcon(baseUrl + 'green.png'),
+      blue: this.makeIcon(baseUrl + 'yellow.png')
+    };
+    this.shadow = new google.maps.MarkerImage(
+        'https://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_shadow.png',
+        new google.maps.Size(22, 20),
+        null,  // no origin
+        new google.maps.Point(6, 20));
+  },
+
+  makeIcon: function(url) {
+    return new google.maps.MarkerImage(url,
+                                       new google.maps.Size(12, 20),
+                                       null,  // Not a sprite, so no origin.
+                                       new google.maps.Point(6, 20));
+  },
+
+  // Makes the sidebar visible.  This will require resizing the map.
+  open: function() {
+    if (!this.isOpen()) {
+      this.container.style.visibility = 'visible';
+      if (this.resizeUI) this.resizeUI();
+    }
+  },
+
+  // Is the sidebar visible?
+  isOpen: function() {
+    return (this.container.style.visibility == 'visible');
+  },
+
+  // Closes the sidebar, and clears out all the overlays.
+  // This will require resizing the map.
+  close: function() {
+    $('srtGlossary').style.visibility = 'hidden';
+    this.container.style.visibility = 'hidden';
+    if (this.resizeUI) this.resizeUI();
+  },
+
+  // This function gets called when we've been resized.
+  // It just redraws the search results starting from the top.
+  resize: function() {
+    if (this.isOpen && this.results != null) {
+      showPage(gSidebar.getFirstIndex() + 1, 1);
+    }
+  },
+
+  // Empties out the sidebar.
+  reset: function() {
+    this.infoWindow.close();
+    removeChildren($('srBody'));
+    removeChildren($('srPage'));
+    for (i in this.markers) {
+      this.markers[i].setMap(null);
+    }
+    this.markers = {};
+    this._firstIndex = this._lastIndex = -1;
+  },
+
+  limitSearch: function(bounds) {
+    this.limit_on = 1;
+    this.displaySearchResults(this.query, this.results, this.snippets, bounds);
+  },
+
+  unlimitSearch: function(bounds) {
+    this.limit_on = null;
+    doSearch(this.query);
+  },
+
+  // Starts displaying the results from a new search.
+  displaySearchResults: function(query, results, snippets, bounds) {
+    this.results = results;
+    this.query = query;
+    this.snippets = snippets;
+    this.bounds = bounds;
+
+    // Every time we get a new search to display, and limit is on,
+    // find the results that are within the bounds.
+    var html;
+    var totalResults = results.length;
+
+    if (this.limit_on) {
+      this.results = MapSearch.prototype.inBounds(this.results, this.bounds);
+    }
+
+    if (query.length == 0) {
+      // No search terms given.
+      $('srtResults').textContent = 'No search terms';
+      $('srtGlossary').style.visibility = 'hidden';
+      $('srtFound').textContent = '';
+    } else if (this.results.length == 0 && this.limit_on == null) {
+      // Empty results.
+      $('srtResults').innerHTML = 'No results found for <b>' + query + '</b>';
+      $('srtGlossary').style.visibility = 'hidden';
+      $('srtFound').textContent = '';
+    } else {
+      // Got results, show them.
+      $('srtResults').innerHTML = 'Search results for <b>' + query + '</b>';
+      if (this.limit_on) {
+        html = 'Found ' + this.results.length + ' local matches' +
+            '<br><a href=\"javascript:unlimit()">' +
+            'Expand results</a>' +
+            ' to entire planet';
+      } else {
+        html = 'Found ' + this.results.length + ' matches' +
+            '<br><a href="javascript:limit()">' +
+            'Limit results</a>' +
+            ' to current region';
+      }
+
+      $('srtFound').innerHTML = html;
+      $('srtGlossary').style.visibility = 'visible';
+    }
+    this.showPage(1, 1, snippets);
+  },
+
+  // Shows one page of results starting at results number <start> and going
+  // in the specified direction <dir>=(-1 | 1).  Adds paging controls if
+  // we need them.
+  //
+  // If we weren't embedding javascript directly into the HTML link
+  // we could avoid the global showPage reference and just provide
+  // a click action directly on the link.
+  showPage: function(start, dir, snippets) {
+    this.reset();
+    if (this.results.length == 0) return;
+
+    start = start - 1;  // Use zero based math.
+
+    // If we're adding in the reverse direction, we can run out of
+    // elements before space.  In which case, we just want to add more
+    // in the forward direction.  Increment start to avoid double adding.
+    if (dir == -1) this.addResults(start++, -1, snippets);
+    this.addResults(start, 1, snippets);
+
+    // +1 based math in here because people don't like to see zeros.
+    var first = this.getFirstIndex() + 1;
+    var last = this.getLastIndex() + 1;
+
+    // Create the paging buttons if we need them.
+    // Is it better to show/hide these rather than recreate them each time?
+    if (last - first + 1 < this.results.length) {
+      var html = '';
+      if (first > 1) {
+        html += '<a href="javascript:showPage(' + first + ',-1' + ');">' +
+            '<img src="images/nav_prev.gif">' + first + '</a>';
+      } else {
+        html += '<img src="images/nav_prev_gray.gif">';
+        html += first;
+      }
+      html += ' - ';
+      if (last < this.results.length) {
+        html += '<a href="javascript:showPage(' + last + ',1' + ');">' +
+            last + '<img src="images/nav_next.gif">' + '</a>';
+      } else {
+        html += last;
+        html += '<img src="images/nav_next_gray.gif">';
+      }
+      $('srPage').innerHTML = html;
+    }
+    if (this.results.length == 1) {
+      openMarker(1);
+    }
+    if (this.limit_on == null && this.results.length > 1) {
+      // Check that there is at least 1 marker in view.
+      var count = 0;
+      for (m in this.markers) {
+        if (this.bounds.contains(this.markers[m].getPosition())) count++;
+      }
+      if (count == 0) {
+        this.center(this.markers[this.getFirstIndex()].getPosition());
+      }
+    }
+  },
+
+  // Given a result, makes the HTML element to display it.
+  //
+  // If we weren't embedding javascript in the HTML link here, we could
+  // avoid this reference to the global gSidebar and just put a click
+  // action directly onto the link.
+  makeSidebarResult: function(result, index, snippets) {
+    var elem = makeDiv(document, {});
+    var title = makeDiv(document, {});
+    var icon;
+
+    if (result.type == 'Stories') {
+      icon = this.icons['green'];
+    } else if (result.type == 'Spacecraft') {
+      icon = this.icons['blue'];
+    } else {
+      icon = this.icons['red'];
+    }
+
+    var html =
+        '<table cellspacing=0 cellpadding=0><tr><td valign=middle>' +
+        '<img src="' + icon.url + '"' +
+        ' style="padding: 3px;">' +
+        '</td><td>' +
+        '<div class="snippetHeader"><a href="javascript:openMarker(' +
+        (index + 1) + ');">' +
+        result.name +
+        '</a></div>';
+
+    if (snippets == 1) {
+      html += '<div class="snippet">' + result.snippet + '</div>';
+    }
+    html += '</td></tr></table>';
+
+    title.innerHTML = html;
+    elem.appendChild(title);
+
+    // Set up search result tool-tip.
+    elem.setAttribute('title', result.name + ': ' + result.snippet);
+
+    return elem;
+  },
+
+  // Adds results to the sidebar, in the proper direction, until
+  // we either run out of space, or results.
+  addResults: function(start, dir, snippets) {
+    var maxHeight = getPosition($('srPage')).top;
+    var parent = $('srBody');
+    var end = dir > 0 ? this.results.length : -1;
+
+    for (var index = start; index != end; index += dir) {
+      var result = this.results.getResult(index);
+      var elem = this.makeSidebarResult(result, index, snippets);
+
+      if (dir > 0) parent.appendChild(elem);
+      else parent.insertBefore(elem, parent.firstChild);
+
+      // See if we've run out of space.
+      // If so, remove this child and stop.
+      var position = getPosition(parent);
+      var height = position.top + position.height;
+      if (height > (maxHeight - 40)) {
+        parent.removeChild(elem);
+        break;
+      }
+      // Still have space, so make a map marker too.
+      this.makeMarker(result, index);
+    }
+  },
+
+  // Makes a Maps API marker for a single result.
+  makeMarker: function(result, index) {
+    var position = new google.maps.LatLng(result.lat, result.lon);
+    var icon;
+
+    if (result.type == 'Stories') {
+      icon = this.icons['green'];
+    } else if (result.type == 'Spacecraft') {
+      icon = this.icons['blue'];
+    } else {
+      icon = this.icons['red'];
+    }
+
+    var marker = new google.maps.Marker({
+      position: position,
+      map: this.map,
+      title: result.name,
+      icon: icon
+    });
+
+    google.maps.event.addListener(marker, 'click', function() {
+      openMarker(index + 1);
+    });
+
+    // Hang onto the results object.  We'll need it for the
+    // HTML if the marker is opened.
+    marker.result = result;
+
+    // Keep track of the low and high index numbers of the
+    // markers that have been added to the markers object.
+    // We do this so that we can don't have to use a sparse Array,
+    // but can still know the length of the array.
+    if (this._lastIndex == -1 || index > this._lastIndex)
+      this._lastIndex = index;
+    if (this._firstIndex == -1 || index < this._firstIndex)
+      this._firstIndex = index;
+    this.markers[index] = marker;
+  },
+
+  // Markers are indexed in the array of all markers based on their
+  // index in the search.results array.
+  // Deals with the +1 necessary to keep from showing 0 values in the UI.
+  openMarker: function(index) {
+    var marker = this.markers[index - 1];
+    var iw = this.infoWindow;
+    iw.close();
+    iw.setContent(marker.result.html);
+    iw.open(this.map, marker);
+  },
+
+  getFirstIndex: function() { return this._firstIndex; },
+  getLastIndex: function() { return this._lastIndex; },
+
+  // Centers on a particular marker in the event that no markers
+  // are visible in the current window.
+  center: function(lat, lon) {
+    // Handle being passed a LatLng directly.
+    var latLng = arguments.length == 1 ? lat : new google.maps.LatLng(lat, lon);
+    this.map.panTo(latLng);
+  }
+};

@@ -1,0 +1,94 @@
+// Copyright 2012 Google Inc. All Rights Reserved.
+
+/**
+ * @fileoverview A class to handle getting and setting url param arguments.
+ * @author mikeperrow@google.com (Mike Perrow)
+ */
+
+var Config = Class.create();
+
+/**
+ * @param {string} params The .search part of the URL.
+ * @param {Object} defaults An object containing named default arguments.
+ */
+Config.prototype.initialize = function(params, defaults) {
+  this.defaults = {};
+  this.current = {};
+  for (var name in defaults) {
+    this.current[name] = this.defaults[name] = defaults[name];
+  }
+  if (params && params.length != 0) {
+    var pairs = params.split('&');
+    for (var i = 0; i < pairs.length; i++) {
+      var apair = unescape(pairs[i]).split('=');
+      if (apair[0]) { this.current[apair[0]] = apair[1]; }
+    }
+  }
+};
+
+/**
+ * @return {Object} The default config as an object literal.
+ */
+Config.prototype.getDefaults = function() {
+  return this.defaults;
+};
+
+/**
+ * @return {Object} The current config as an object literal.
+ */
+Config.prototype.getCurrent = function() {
+  return this.current;
+};
+
+/**
+ * @param {string} name Name of attribute to query.
+ * @return {string} The value of the named attribute.
+ */
+Config.prototype.getValue = function(name) {
+  return this.current[name];
+};
+
+/**
+ * Sets the named attribute to the given value.
+ * @param {string} name Name of the attribute to set.
+ * @param {string} value Value to assign.
+ */
+Config.prototype.setValue = function(name, value) {
+  this.current[name] = value;
+};
+
+/**
+ * @return {string} The current config as the concatentation of 'name=value\n'.
+ */
+Config.prototype.toStr = function() {
+  var str = '';
+  for (key in this.current) {
+    str += key + '=' + this.current[key] + '\n';
+  }
+  return str;
+};
+
+/**
+ * Sets many values at once.
+ * @param {Object} values Object with key value pairs.
+ */
+Config.prototype.setValues = function(values) {
+  for (var name in values) {
+    this.setValue(name, values[name]);
+  }
+};
+
+/**
+ * Returns things that have changed as an array of 'name=value' pairs.
+ * I like using an array because you can just .join it to make a URL.
+ * @return {Array} Non-default config params in 'name=value' format.
+ */
+Config.prototype.getChanged = function() {
+  var changed = Array();
+  for (var name in this.current) {
+    if (this.current[name] != this.defaults[name]) {
+      changed.push(name + '=' + this.current[name]);
+    }
+  }
+  return changed;
+};

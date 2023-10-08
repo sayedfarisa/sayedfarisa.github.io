@@ -1,0 +1,176 @@
+var gMap;                   // our global map instance
+var gConfig;                // global configutation variables
+var gMapSearch;             // a search engine
+var gSidebar;               // a search results handler
+
+function loadApplication() {
+  // These are our default configuration options.  They can be
+  // overridden by parameters in the URL.
+  if (!gConfig) {
+    gConfig = new Config(window.location.hash.substring(1),
+                         { lat: 0,
+                           lon: -90,
+                           zoom: 3,
+                           map: 'elevation',
+                           snippets: 1,
+                           q: '' });
+  }
+
+  // Create our global map instance, and add the default controls.
+  resizeMap();
+  var mapOptions = {
+    center: new google.maps.LatLng(0, -90),
+    zoom: parseInt(gConfig.getValue('zoom'), 10),
+    mapTypeControlOptions: {
+      mapTypeIds: ['elevation', 'visible', 'infrared']
+    },
+    mapTypeId: 'elevation',
+    disableDefaultUI: true,
+    mapTypeControl: true,
+    panControl: true,
+    zoomControl: true
+  };
+
+  gMap = new google.maps.Map($('map'), mapOptions);
+
+  var copyrightCtl = makeDiv(document, { height: '1.3em', fontSize: 'small' });
+  var mapcaption = makeDiv(document, {});
+  mapcaption.style.margin = '5px';
+  gMap.controls[google.maps.ControlPosition.BOTTOM_RIGHT].push(copyrightCtl);
+
+  addMarsMapTypes(gMap, mapcaption, copyrightCtl);
+
+  // Set up classes for search and the search results sidebar.
+  gMapSearch = new MapSearch();
+  gSidebar = new Sidebar(resizeMap, gMap);
+  // Add our custom controls: a caption for mapType and a scalebar.
+
+  makeCustomScalebar();
+
+  // Handle startup options (either passed in the URL or the defaults).
+  //   Open the sidebar before setCenter or it'll be off.
+  //   Also, setCenter has to happen before any search terms.
+  var q = htmlEscape(gConfig.getValue('q'));
+  if (q != '') gSidebar.open();
+  gMap.setCenter(new google.maps.LatLng(gConfig.getValue('lat'),
+                                        gConfig.getValue('lon')));
+  gMap.setZoom(parseInt(gConfig.getValue('zoom'), 10));
+
+  if (q != '') {
+    $('searchtext').value = q;
+    // The map bounds may not yet be set, so we may have to wait.
+    if (gMap.getBounds()) {
+      doSearch(q);
+    } else {
+      google.maps.event.addListenerOnce(gMap, 'bounds_changed', function() {
+        doSearch(q);
+      });
+    }
+  }
+  updatePageUrl();
+
+  // A few additional actions to provide a nice UI experience.
+  $('searchtext').focus();
+  google.maps.event.addListener(gMap, 'bounds_changed', updatePageUrl);
+}
+
+
+// Adds a custom scalebar for just the elevation map.
+function makeCustomScalebar() {
+  var scalebar = new Scalebar(
+      document, [-9, 21], [-9, -6, -3, 0, 3, 6, 9, 12, 15, 18, 21], 'km');
+  gMap.controls[google.maps.ControlPosition.LEFT_BOTTOM].push(
+      scalebar.getContainer());
+  google.maps.event.addListener(gMap, 'maptypeid_changed', function() {
+    var name = gMap.getMapTypeId();
+    if (name.toLowerCase() == 'elevation') {
+      scalebar.show();
+    } else {
+      scalebar.hide();
+    }
+  });
+}
+
+
+// makeUrl - creates a URL that will get the application back
+//           to its current state, for bookmarking.
+function makeUrl() {
+  gConfig.setValues({
+    lat: formatFloat(gMap.getCenter().lat(), 6),
+    lon: formatFloat(gMap.getCenter().lng(), 6),
+    zoom: gMap.getZoom(),
+    map: gMap.getMapTypeId(),
+    snippets: gConfig.getValue('snippets'),
+    q: gSidebar.isOpen() ? gMapSearch.lastSearchQuery : ''
+  });
+
+  var loc = window.location.href;
+  loc = loc.replace(/[?#]+.*/, '');
+  return loc + '#' + gConfig.getChanged().join('&');
+}
+
+function updatePageUrl() {
+  if ($('link')) $('link').href = makeUrl();
+}
+
+// Resizes the UI components because something's been opened or closed.
+function resizeMap() {
+  var map = $('map');
+  var sidebar = $('sidebar');
+
+  var height = getWindowHeight() - getPosition(map).top;
+  if (height >= 0) {
+    map.style.height = px(height);
+    sidebar.style.height = px(height);
+  }
+
+  // Set the width of the map to accommodate the search sidebar.
+  var sidebarWidth = getPosition(sidebar).width;
+  if (gSidebar && gSidebar.isOpen()) {
+    map.style.left = px(sidebarWidth + 10);
+    gSidebar.resize();
+    map.style.width = px(getWindowWidth() - (sidebarWidth + 10));
+  } else {
+    map.style.left = px(0);
+    map.style.width = px(getWindowWidth());
+  }
+  if (gMap) google.maps.event.trigger(gMap, 'resize');
+}
+
+// Does everything necessary to execute a search query.
+function doSearch(queryText) {
+  if (!queryText) queryText = htmlEscape($('searchtext').value);
+  var results = gMapSearch.doSearch(queryText);
+
+  gSidebar.open();
+  gSidebar.displaySearchResults(queryText,
+                                results,
+                                gConfig.getValue('snippets'),
+                                gMap.getBounds());
+  updatePageUrl();
+}
+
+function q(queryText) {
+  $('searchtext').value = queryText;
+  doSearch();
+}
+
+// These functions are used in various places as the href on HTML links
+// or in places where one of the globals in this file is needed.
+//
+// (Un)limits search to the current window bounds.
+function limit() { gSidebar.limitSearch(gMap.getBounds()); }
+function unlimit() { gSidebar.unlimitSearch(); }
+// Closes the sidebar.  Used in the sidebar's close button's HTML.
+function closeSidebar() { gSidebar.close(); }
+// Opens a specific marker.  Used in the sidebar's result's HTML links.
+function openMarker(i) { gSidebar.openMarker(i); }
+// Shows a page.  Used in the sidebar's paging controls.
+function showPage(index, dir) {
+  gSidebar.showPage(index, dir, gConfig.getValue('snippets'));
+}
+function center(lat, lon) {
+  // Handle being passed a LatLng directly.
+  var latLng = arguments.length == 1 ? lat : new google.maps.LatLng(lat, lon);
+  this.map.panTo(latLng);
+}

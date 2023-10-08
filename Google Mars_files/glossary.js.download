@@ -1,0 +1,9 @@
+// Open up the glossary in another window.  Called from both the
+// glossary link and from the Feature Type portion of the infowindow popups.
+function glossary(name) {
+  var w = window.open(
+      'glossary.html#' + name,
+      'glossary',
+      'menubar=no,status=no,width=500,height=500,scrollbars=no');
+  if (w.window.hilite) w.window.hilite(name);
+}
